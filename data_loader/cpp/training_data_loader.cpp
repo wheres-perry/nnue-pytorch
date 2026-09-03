@@ -388,6 +388,97 @@ struct PP_3WideExtractor: IFeatureExtractor {
     }
 };
 
+struct LatentThreats {
+    static constexpr std::string_view NAME = "LatentThreats";
+
+    static constexpr int SQUARE_NB           = 64;
+    static constexpr int KING_SQUARES_HM     = 32;
+    static constexpr int SLIDER_TYPES        = 3; // Bishop, Rook, Queen
+    static constexpr int TARGET_KINGS        = 2; // Friendly (0), Opponent (1)
+    static constexpr int MAX_ACTIVE_FEATURES = 8;
+    static constexpr int INPUTS              = TARGET_KINGS * SLIDER_TYPES * KING_SQUARES_HM * SQUARE_NB; // 12288
+
+    static_assert(INPUTS == 12288);
+
+    static inline Square orient_hm(Color color, Square sq, Square ksq) {
+        int orient = static_cast<int>(FullThreats::OrientTBL[static_cast<int>(color)][static_cast<int>(ksq)]);
+        return static_cast<Square>(static_cast<int>(sq) ^ orient);
+    }
+
+    static inline int king_square_hm_index(Square oriented_k) {
+        int sq = static_cast<int>(oriented_k);
+        return (sq >> 3) * 4 + (sq & 7);
+    }
+
+    static std::pair<int, int>
+    fill_features_sparse(const TrainingDataEntry& e, int* features, Color color) {
+        const auto& pos = e.pos;
+        const Color us = color;
+        const Color them = !color;
+
+        const Square ksq_us = pos.kingSquare(us);
+        const Square ksq_them = pos.kingSquare(them);
+
+        int k = 0;
+
+        // 1. Process Absolute Pins against OUR King (K_target = 0)
+        Bitboard pinners_them = Bitboard::none();
+        Bitboard pinned_us = slider_blockers(pos, them, ksq_us, pinners_them);
+
+        for (Square p_sq : pinned_us) {
+            Bitboard line_pinners = line_bb(ksq_us, p_sq) & pinners_them;
+            if (!line_pinners.any())
+                continue;
+            Square s_sq = line_pinners.first();
+            PieceType pt = pos.pieceAt(s_sq).type();
+            int type_idx = (pt == PieceType::Bishop) ? 0 : (pt == PieceType::Rook ? 1 : 2);
+
+            Square oriented_k = orient_hm(us, ksq_us, ksq_us);
+            Square oriented_p = orient_hm(us, p_sq, ksq_us);
+
+            int s_k = king_square_hm_index(oriented_k);
+            int s_p = static_cast<int>(oriented_p);
+
+            int feat_idx = (0 * 3 * 32 * 64) + (type_idx * 32 * 64) + (s_k * 64) + s_p;
+            features[k++] = feat_idx;
+        }
+
+        // 2. Process Skewers / X-Rays against OPPONENT King (K_target = 1)
+        Bitboard pinners_us = Bitboard::none();
+        Bitboard pinned_them = slider_blockers(pos, us, ksq_them, pinners_us);
+
+        for (Square p_sq : pinned_them) {
+            Bitboard line_pinners = line_bb(ksq_them, p_sq) & pinners_us;
+            if (!line_pinners.any())
+                continue;
+            Square s_sq = line_pinners.first();
+            PieceType pt = pos.pieceAt(s_sq).type();
+            int type_idx = (pt == PieceType::Bishop) ? 0 : (pt == PieceType::Rook ? 1 : 2);
+
+            Square oriented_k = orient_hm(them, ksq_them, ksq_them);
+            Square oriented_p = orient_hm(them, p_sq, ksq_them);
+
+            int s_k = king_square_hm_index(oriented_k);
+            int s_p = static_cast<int>(oriented_p);
+
+            int feat_idx = (1 * 3 * 32 * 64) + (type_idx * 32 * 64) + (s_k * 64) + s_p;
+            features[k++] = feat_idx;
+        }
+
+        return {k, INPUTS};
+    }
+};
+
+struct LatentThreatsExtractor: IFeatureExtractor {
+    int inputs() const override { return LatentThreats::INPUTS; }
+    int max_active_features() const override { return LatentThreats::MAX_ACTIVE_FEATURES; }
+    std::pair<int, int> fill_features_sparse(const TrainingDataEntry& e,
+                                             int*                     features,
+                                             Color                    color) const override {
+        return LatentThreats::fill_features_sparse(e, features, color);
+    }
+};
+
 struct ComposedFeatureExtractor: IFeatureExtractor {
     std::vector<std::unique_ptr<IFeatureExtractor>> extractors;
     int                                             m_inputs;
@@ -437,6 +528,8 @@ static std::unique_ptr<IFeatureExtractor> make_single_extractor(std::string_view
         return std::make_unique<FullThreatsExtractor>();
     if (name == "PP_3Wide")
         return std::make_unique<PP_3WideExtractor>();
+    if (name == "LatentThreats" || name == "Latent_Threats")
+        return std::make_unique<LatentThreatsExtractor>();
     return nullptr;
 }
 

@@ -8,12 +8,15 @@ import tyro
 from .full_threats import FullThreats
 from .halfka_v2_hm import HalfKav2Hm
 from .input_feature import InputFeature
+from .latent_threats import LatentThreats
 from .pp_3wide import PP3Wide
 
 _FEATURE_COMPONENTS: dict[str, type[InputFeature]] = {
     "HalfKAv2_hm^": HalfKav2Hm,
     "Full_Threats": FullThreats,
     "PP_3Wide": PP3Wide,
+    "LatentThreats": LatentThreats,
+    "Latent_Threats": LatentThreats,
 }
 
 DEFAULT_FEATURES = "Full_Threats+PP_3Wide+HalfKAv2_hm^"
@@ -56,6 +59,7 @@ __all__ = [
     "FullThreats",
     "HalfKav2Hm",
     "InputFeature",
+    "LatentThreats",
     "PP3Wide",
     "add_feature_args",
     "get_available_features",

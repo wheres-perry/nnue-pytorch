@@ -5246,6 +5246,43 @@ namespace chess
         return allBlockers;
     }
 
+    [[nodiscard]] inline Bitboard between_bb(Square sq1, Square sq2)
+    {
+        return bb::between(sq1, sq2);
+    }
+
+    [[nodiscard]] inline Bitboard line_bb(Square sq1, Square sq2)
+    {
+        return bb::line(sq1, sq2);
+    }
+
+    inline Bitboard slider_blockers(const Position& pos, Color attackerColor, Square ksq, Bitboard& pinners)
+    {
+        const Bitboard occupied = pos.piecesBB();
+        const Bitboard bishops = pos.piecesBB(Piece(PieceType::Bishop, attackerColor));
+        const Bitboard rooks = pos.piecesBB(Piece(PieceType::Rook, attackerColor));
+        const Bitboard queens = pos.piecesBB(Piece(PieceType::Queen, attackerColor));
+
+        const Bitboard snipers =
+            (bb::pseudoAttacks<PieceType::Bishop>(ksq) & (bishops | queens))
+            | (bb::pseudoAttacks<PieceType::Rook>(ksq) & (rooks | queens));
+
+        Bitboard allBlockers = Bitboard::none();
+        pinners = Bitboard::none();
+
+        for (Square sniper_sq : snipers)
+        {
+            const Bitboard blockers = bb::between(sniper_sq, ksq) & occupied;
+            if (blockers.exactlyOne())
+            {
+                allBlockers |= blockers;
+                pinners |= Bitboard::square(sniper_sq);
+            }
+        }
+
+        return allBlockers;
+    }
+
     inline MoveLegalityChecker::MoveLegalityChecker(const Position& position) :
         m_position(&position),
         m_checkers(position.checkers()),

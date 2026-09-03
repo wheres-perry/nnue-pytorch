@@ -5,7 +5,7 @@ python-chess==0.31.4
 matplotlib
 tensorboard
 numba
-numpy<2.0
+numpy
 requests
 tyro
 ruff==0.16.0
